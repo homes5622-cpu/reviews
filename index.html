@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>도서 리뷰 프롬프트 빌더 v2</title>
+<style>
+:root{
+  --bg:#FAF9F6; --ink:#2B2B2B; --point:#1F4D3C;
+  --line:#E3E0D8; --muted:#8A857B; --card:#fff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:system-ui,'Pretendard','Apple SD Gothic Neo',sans-serif;line-height:1.6}
+header{background:var(--point);color:#fff;padding:22px 20px}
+header h1{margin:0;font-size:20px;letter-spacing:-.3px}
+header p{margin:6px 0 0;font-size:13px;opacity:.85}
+.wrap{display:grid;grid-template-columns:1fr;gap:18px;padding:18px;max-width:1400px;margin:0 auto}
+@media(min-width:1000px){.wrap{grid-template-columns:1.05fr .95fr;align-items:start}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.panel h2{margin:0 0 12px;font-size:15px;border-left:3px solid var(--point);padding-left:9px}
+details{border:1px solid var(--line);border-radius:9px;margin-bottom:9px;background:#fff}
+details[open]{box-shadow:0 1px 4px rgba(0,0,0,.04)}
+summary{cursor:pointer;padding:10px 12px;font-size:14px;font-weight:600;list-style:none;
+  display:flex;justify-content:space-between;align-items:center;gap:8px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"▾";color:var(--muted);font-size:11px}
+details[open] summary::after{content:"▴"}
+.count{font-size:11px;font-weight:500;color:#fff;background:var(--point);
+  border-radius:20px;padding:1px 8px;min-width:20px;text-align:center}
+.count.zero{background:#CFCBC2;color:#fff}
+.body{padding:0 12px 12px}
+.hint{font-size:11.5px;color:var(--muted);margin:0 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:#fff;color:var(--ink);
+  border-radius:20px;padding:5px 11px;font-size:12.5px;cursor:pointer;
+  font-family:inherit;transition:.12s}
+.chip:hover{border-color:var(--point)}
+.chip.on{background:var(--point);color:#fff;border-color:var(--point)}
+.chip .sw{display:inline-block;width:9px;height:9px;border-radius:50%;
+  margin-right:5px;vertical-align:-1px;border:1px solid rgba(0,0,0,.15)}
+label.f{display:block;font-size:12px;font-weight:600;margin:10px 0 4px}
+input[type=text],input[type=date],textarea,select{
+  width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;
+  font-family:inherit;font-size:13px;background:#fff;color:var(--ink)}
+textarea{resize:vertical;min-height:52px}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--point);outline-offset:-1px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bar{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:11px}
+.btn{border:1px solid var(--point);background:#fff;color:var(--point);
+  border-radius:7px;padding:8px 14px;font-size:13px;font-weight:600;
+  cursor:pointer;font-family:inherit}
+.btn.pri{background:var(--point);color:#fff}
+.btn.gh{border-color:var(--line);color:var(--muted)}
+.btn:active{transform:translateY(1px)}
+pre#out{background:#14161A;color:#E8E6E1;border-radius:9px;padding:14px;
+  font-size:12px;line-height:1.65;white-space:pre-wrap;word-break:break-word;
+  max-height:70vh;overflow:auto;margin:0;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.stat{font-size:11.5px;color:var(--muted);margin:8px 2px 0;display:flex;
+  justify-content:space-between;flex-wrap:wrap;gap:6px}
+.sticky{position:sticky;top:18px}
+#toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);
+  background:var(--point);color:#fff;padding:10px 20px;border-radius:24px;
+  font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:99}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.over{color:#9B1B30;font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <h1>도서 리뷰 HTML 프롬프트 빌더 <span style="opacity:.7;font-size:13px">v2</span></h1>
+  <p>단어를 클릭해 고르면 오른쪽에 프롬프트가 실시간으로 조립됩니다. 완성되면 복사해서 AI에게 붙여넣으세요.</p>
+</header>
+
+<div class="wrap">
+  <!-- ========== 왼쪽: 입력 ========== -->
+  <div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2>1. 도서 기본 정보</h2>
+      <div class="grid2">
+        <div><label class="f" for="t">제목</label><input type="text" id="t" data-k="title" placeholder="사피엔스"></div>
+        <div><label class="f" for="a">저자</label><input type="text" id="a" data-k="author" placeholder="유발 하라리"></div>
+        <div><label class="f" for="p">출판사</label><input type="text" id="p" data-k="pub" placeholder="김영사"></div>
+        <div><label class="f" for="y">출간연도</label><input type="text" id="y" data-k="year" placeholder="2015"></div>
+      </div>
+      <label class="f" for="q">인상 깊은 구절 (줄바꿈으로 여러 개)</label>
+      <textarea id="q" data-k="quote" placeholder="우리는 밀을 길들인 것이 아니라 밀이 우리를 길들였다."></textarea>
+      <div class="grid2">
+        <div><label class="f" for="r">내 평점 (5점 만점)</label>
+          <select id="r" data-k="rate">
+            <option value="">선택</option>
+            <option>5.0</option><option>4.5</option><option>4.0</option><option>3.5</option>
+            <option>3.0</option><option>2.5</option><option>2.0</option><option>1.5</option><option>1.0</option>
+          </select></div>
+        <div><label class="f" for="w">작성자</label><input type="text" id="w" data-k="writer" placeholder="홍길동"></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <h2>2. 서지·리뷰 단어 선택</h2>
+      <div id="bankA"></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <h2>3. 나의 감상 (1인칭)</h2>
+      <p class="hint">칩은 '시작 단어'로 들어갑니다. 아래 칸에 직접 쓰면 그 내용이 우선 사용돼요. 비우면 해당 줄은 프롬프트에서 제외됩니다.</p>
+      <div id="bankB"></div>
+      <label class="f" for="fw">직접 쓰는 자유 감상 (선택)</label>
+      <textarea id="fw" data-k="free" rows="3" placeholder="책을 덮고 나서 든 생각을 자유롭게..."></textarea>
+    </div>
+
+    <div class="panel">
+      <h2>4. 디자인 옵션</h2>
+      <div id="bankC"></div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label class="f" for="len">객관 서평 분량</label>
+          <select id="len" data-k="len">
+            <option>600~900자</option><option>400~600자</option>
+            <option>900~1200자</option><option>1200자 이상</option>
+          </select></div>
+        <div><label class="f" for="tone">감상 섹션 말투</label>
+          <select id="tone" data-k="tone">
+            <option>존댓말 평문</option><option>반말 일기체</option><option>구어체 솔직한 톤</option>
+          </select></div>
+      </div>
+      <label class="f"><input type="checkbox" id="opt_ls" checked style="width:auto"> 8번 입력폼 localStorage 자동저장 포함</label>
+      <label class="f"><input type="checkbox" id="opt_txt" style="width:auto"> 감상 .txt 다운로드 버튼 추가</label>
+      <label class="f"><input type="checkbox" id="opt_anim" style="width:auto"> 평가 게이지 애니메이션 추가</label>
+      <label class="f"><input type="checkbox" id="opt_dark" style="width:auto"> 다크모드 토글 추가</label>
+    </div>
+  </div>
+
+  <!-- ========== 오른쪽: 출력 ========== -->
+  <div class="panel sticky">
+    <h2>완성된 프롬프트</h2>
+    <div class="bar">
+      <button class="btn pri" id="copy">복사하기</button>
+      <button class="btn" id="dl">.txt 저장</button>
+      <button class="btn" id="rand">랜덤 채우기</button>
+      <button class="btn" id="sample">예시(사피엔스)</button>
+      <button class="btn gh" id="reset">전체 초기화</button>
+    </div>
+    <pre id="out"></pre>
+    <div class="stat">
+      <span id="cnt"></span>
+      <span id="warn"></span>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ---------- 단어 뱅크 ---------- */
+const S = (s)=>s.split('·').map(v=>v.trim());
+const BANK_A = [
+ {k:'genre', t:'① 장르', max:1, items:S('인문·역사|사회과학|경제·경영|자기계발|심리학|철학|과학교양|기술·IT|현대문학|고전문학|에세이|회고록·자서전|시집|추리·미스터리|SF·사변소설|판타지|로맨스|스릴러|그래픽노블|르포·논픽션'.replace(/·/g,'\u00B7')).join('').split('|')},
+ {k:'topic', t:'② 핵심 주제 키워드', max:5, items:['정체성','성장서사','상실과 애도','고독','욕망','트라우마','계급','불평등','권력관계','공동체','세대갈등','도시화','자유의지','윤리적 딜레마','시간의 비선형성','기억의 왜곡','허구의 힘','우연과 필연','자동화','데이터 감시','기후위기','팬데믹 이후','노동의 변화','포스트휴먼']},
+ {k:'persona', t:'③ 추천 대상', max:2, items:['인문서 입문 독자','깊이 있는 논증을 즐기는 독자','출퇴근 짧은 독서를 원하는 사람','완독 경험이 필요한 독서 초보','고전이 어렵게 느껴지는 독자','독서모임 발제자','서평 블로거','수험생·대학 신입생','팀을 처음 맡은 리더','상실을 겪고 있는 사람','커리어 전환을 고민 중인 30대','번아웃을 겪는 직장인','사춘기 자녀를 둔 부모','글쓰기를 배우는 사람','창업·사이드프로젝트 준비자','데이터·AI 실무자','교사·강사','은퇴 후 독서를 시작한 분','마케터·기획자','밤에 조용히 읽을 책을 찾는 사람']},
+ {k:'oneline', t:'④ 한 줄 총평', max:1, items:['익숙한 일상을 낯설게 만드는 책','읽고 나면 세계관이 한 칸 넓어진다','불편하지만 반드시 필요한 질문','조용히, 그러나 오래 남는 여운','첫 50페이지만 버티면 끝까지 간다','설득이 아니라 설계에 가까운 글','머리보다 체온이 먼저 반응하는 책','정답 대신 좋은 질문을 쥐어준다','한 문장도 낭비가 없다','입문서의 탈을 쓴 본격서','생각의 근육을 쓰게 만드는 책','밑줄이 멈추지 않는다','다 읽고 나서가 진짜 시작','지식보다 태도를 남긴다','서늘하게 정확한 문장들','가볍게 집어 무겁게 내려놓는다','재독할수록 다른 책이 된다','쉽게 읽히지만 쉽게 잊히지 않는다','위로보다 직면을 택한 책','책장 맨 앞줄에 둘 한 권']},
+ {k:'pros', t:'⑤ 좋았던 점', max:3, items:['치밀한 논증','간결한 문체','독창적 관점','친절한 설명','유려한 번역','명확한 구조','적절한 호흡','시의성 있는 주제','솔직한 자기고백','유머의 적절한 배치','풍부한 사례','탄탄한 자료 조사','균형 잡힌 시각','설득력 있는 비유','인물의 입체성','몰입도 높은 전개','여운 있는 결말','실천 가능한 제안','정교한 복선','깔끔한 편집·도판']},
+ {k:'cons', t:'⑥ 아쉬운 점', max:2, items:['중반부 전개가 다소 늘어진다','결론이 예상 범위를 벗어나지 않는다','사례가 서구권에 편중돼 있다','용어 설명이 불친절한 구간이 있다','주장에 비해 근거가 얇은 장이 있다','번역투 문장이 간간이 걸린다','반복되는 메시지가 피로감을 준다','인물의 동기 설명이 부족하다','통계 출처 표기가 아쉽다','챕터 간 밀도 편차가 크다','입문자에겐 진입장벽이 있다','기대했던 실천 지침이 적다','분량 대비 정보 밀도가 낮다','결말의 수습이 급하다','반대 입장에 대한 검토가 적다','도표가 본문과 잘 맞물리지 않는다','제목이 내용을 과장한다','시의성이 빠르게 바랠 소지가 있다','감정 묘사가 다소 관습적이다','색인·참고문헌이 부실하다']},
+ {k:'metric', t:'⑦ 평가 지표 (4개)', max:4, items:['가독성','깊이','몰입도','재독의향','독창성','정보밀도','실용성','구성력','문장력','설득력','감정이입','시의성','객관성','번역품질','입문친화도','완독난이도','여운','편집디자인','자료신뢰도','추천지수']}
+];
+const BANK_B = [
+ {k:'why', t:'⑧ 읽게 된 계기', max:1, free:'why_x', items:S('추천받아서·제목에 끌려·서점에서 우연히·저자의 전작이 좋아서·업무 과제 때문에·독서모임 선정도서·베스트셀러라서·영화 원작이라·SNS 인용문을 보고·선물받아서·비슷한 고민 중이라·반박하고 싶어서·오래 묵혀둔 책이라·서평이 인상 깊어서·전공 보충용·면접 준비·번역본이 새로 나와서·저자 강연을 듣고·밑줄 사진을 보고·그냥 쉬고 싶어서')},
+ {k:'when', t:'⑨ 읽은 시기/상황', max:1, free:'when_x', items:S('이직 준비 공백기·출퇴근 지하철·자기 전 30분·주말 카페·병원 대기실·여행 중·번아웃 회복기·프로젝트 마감 직후·휴직 기간·시험 끝난 날·이사 직후·새해 첫 주·장마철·퇴사 고민 중·육아 틈새 시간·야근 후·독서모임 전날 벼락치기·긴 연휴·입원 중·환절기 불면의 밤')},
+ {k:'agree', t:'⑩ 공감 반응', max:2, free:'agree_x', items:S('가슴이 내려앉았다·밑줄을 세 번 그었다·책을 덮고 한참 앉아 있었다·내 얘기 같았다·소름이 돋았다·변명이 사라졌다·눈물이 났다·웃다가 멈췄다·메모장에 옮겨 적었다·친구에게 사진 찍어 보냈다·다시 앞으로 돌아가 읽었다·숨이 트였다·오래 묵은 죄책감이 풀렸다·그 장면이 계속 떠올랐다·안심이 됐다·부끄러웠다·답을 받은 기분·지금 읽길 잘했다·마음이 서늘했다·조용히 고개를 끄덕였다')},
+ {k:'doubt', t:'⑪ 의심·반발', max:1, free:'doubt_x', items:S('근거가 얇게 느껴졌다·과한 일반화로 보였다·반대 사례가 떠올랐다·한국 상황엔 안 맞는다·저자의 전제에 동의하기 어렵다·표본이 편향돼 보인다·결론이 너무 낙관적이다·지나치게 비관적이다·용어가 모호하다·인과를 상관으로 바꿔 쓴 듯하다·다른 학자 견해가 궁금했다·경험과 어긋난다·시대가 달라졌다·생존편향 같다·실행 조건이 빠졌다·비용 얘기가 없다·반론을 다루지 않는다·사례가 극단적이다·자기 책 홍보로 읽혔다·유보하고 싶다')},
+ {k:'act', t:'⑫ 적용할 한 가지', max:1, free:'act_x', items:S('매일 10분 기록하기·회의 전 전제 한 줄 적기·거절 문장 미리 준비하기·주 1회 산책하며 생각 정리·알림 끄고 2시간 몰입·판단 전에 질문 세 개 던지기·월 1권 같은 주제 더 읽기·감정 라벨링 연습·숫자로 근거 확인하기·반대 의견 먼저 듣기·주간 회고 쓰기·소비 전 24시간 대기·아침 루틴 고정·비교 대상 줄이기·가족에게 먼저 연락·모르면 모른다고 말하기·완벽 대신 초안 제출·수면 시간 사수·배운 걸 남에게 설명하기·분기별 목표 1개만 남기기')},
+ {k:'ask', t:'⑬ 남은 질문', max:2, free:'ask_x', items:['만약 그것이 사실이라면, 나는 무엇을 바꿔야 하나?','저자의 주장은 내 상황에서도 유효할까?','왜 나는 이 대목에서 불편했을까?','이 개념을 내 일에 적용하면 어디서 깨질까?','10년 뒤에도 같은 문장에 밑줄을 그을까?','반대 입장의 가장 강한 논거는 무엇일까?',"내가 지금 믿는 '허구'는 무엇인가?",'이걸 알기 전과 후, 실제로 달라진 행동은?','다음에 읽어야 할 책은 무엇인가?',"나는 누구에게 이 책을 권하지 '않을' 것인가?",'저자가 일부러 말하지 않은 것은 무엇일까?','이 주장을 반증하려면 어떤 데이터가 필요할까?','내 경험 중 이 책과 어긋나는 사례는?','이 책이 10년 전에 나왔다면 다르게 읽혔을까?','저자의 결론 대신 내 결론을 쓴다면?','가장 실행하기 어려운 조언은 무엇이고 왜인가?','이 책의 핵심을 한 문장으로 줄이면?','나는 어떤 장을 건너뛰고 싶었나, 왜?','같은 주제의 반대편 책은 무엇일까?','1년 뒤 이 리뷰를 다시 읽으면 뭐가 부끄러울까?']},
+ {k:'self', t:'⑭ 한 줄 자기 기록', max:1, free:'self_x', items:['그 시기에 만난 책','당연하던 것들이 질문으로 바뀐 계절','내 확신에 금을 낸 한 권','결국 그만두기로 했다','멈출 용기를 준 책','읽는 내내 한 사람이 떠올랐다','나에게 쉼을 허락해준 책','읽기 전의 나와 후의 나','미루던 일을 시작하게 한 문장','누군가에게 주고 싶은 책','다 읽고 집에 전화했다','답은 없었지만 질문은 얻었다','내 이력서를 다시 쓰게 만든 책','2026년 가을의 나를 담아둔 기록','같은 자리에서 두 번 멈춘 책','끝내 동의하지 못했지만 고마운 책','그 시간을 견디게 해준 문장들','가장 느리게 읽은, 가장 오래 남은','밑줄보다 여백에 더 많이 썼다','다시 흔들릴 때 또 펼칠 책']}
+];
+const COLORS=[['딥그린','#1F4D3C'],['버건디','#7B2D35'],['네이비','#1E3A5F'],['차콜','#333333'],['인디고','#3B3B98'],['코발트','#0B5FA5'],['틸','#2A7F7F'],['포레스트','#2F5D3A'],['크림슨','#9B1B30'],['오커','#CC7722'],['머스타드','#C8963E'],['테라코타','#B5553D'],['올리브','#6B7A45'],['플럼','#5C3A58'],['세이지','#9CAF88'],['샌드','#D8C3A5'],['더스티로즈','#C08497'],['슬레이트블루','#5A6B8C'],['브론즈','#8C6A3F'],['잉크블랙','#14161A']];
+const BANK_C = [
+ {k:'color', t:'⑮ 포인트 컬러', max:1, items:COLORS.map(c=>c[0]+' '+c[1])},
+ {k:'dtone', t:'⑯ 디자인 톤', max:1, items:S('미니멀·매거진형·신문 칼럼·노트 필기·카드 뉴스·타이포 중심·브루탈리즘·뉴모피즘·다크모드·종이질감·빈티지 서점·북클럽 포스터·인스타 피드형·대시보드형·타임라인형·모노크롬·파스텔·그라디언트 히어로·손글씨 악센트·그리드 컬렉션')},
+ {k:'alias', t:'⑰ 섹션 제목 변형 (나의 기록)', max:1, items:['나의 기록','읽는 동안의 나','독서 일지','사적인 메모','나의 밑줄','여백에 쓴 말','밑줄 뒤의 생각','독서 노트']},
+ {k:'check', t:'⑱ 이런 분께 추천 (3개)', max:3, items:['이 주제를 처음 알아보려는 분','이미 알지만 다시 정리하고 싶은 분','하루 20분씩 읽을 책을 찾는 분','독서모임 발제를 준비하는 분','논쟁적인 주제를 피하지 않는 분','빠른 전개를 선호하는 분','느린 호흡의 글을 좋아하는 분','데이터 기반 주장을 선호하는 분','이야기로 배우는 걸 좋아하는 분','실천 체크리스트가 필요한 분','전공자가 아닌 일반 독자','관련 분야 실무자','원서 전 한국어판으로 감 잡고 싶은 분','같은 저자의 전작을 읽은 분','영화·드라마 원작을 찾는 분','밤에 혼자 읽을 책이 필요한 분','선물용 책을 고르는 분','완독 성취감이 필요한 분','생각을 글로 남기고 싶은 분','비슷한 경험을 통과 중인 분']}
+];
+const ALL=[...BANK_A,...BANK_B,...BANK_C];
+const sel={}; ALL.forEach(g=>sel[g.k]=[]);
+
+/* ---------- 렌더 ---------- */
+function render(bank, mount){
+  const host=document.getElementById(mount);
+  bank.forEach(g=>{
+    const d=document.createElement('details');
+    d.innerHTML=`<summary><span>${g.t}</span><span class="count zero" data-c="${g.k}">0/${g.max}</span></summary>
+      <div class="body"><p class="hint">최대 ${g.max}개 · 다시 누르면 해제</p>
+      <div class="chips" data-g="${g.k}"></div>
+      ${g.free?`<label class="f">직접 입력 (우선 적용)</label><input type="text" data-k="${g.free}" placeholder="직접 쓰면 위 선택 대신 이 문장이 들어갑니다">`:''}
+      </div>`;
+    host.appendChild(d);
+    const box=d.querySelector('.chips');
+    g.items.forEach(it=>{
+      const b=document.createElement('button');
+      b.className='chip'; b.type='button';
+      if(g.k==='color'){const hex=it.split(' ')[1];b.innerHTML=`<span class="sw" style="background:${hex}"></span>${it.split(' ')[0]}`;}
+      else b.textContent=it;
+      b.onclick=()=>{
+        const i=sel[g.k].indexOf(it);
+        if(i>-1) sel[g.k].splice(i,1);
+        else{ if(sel[g.k].length>=g.max) sel[g.k].shift(); sel[g.k].push(it); }
+        paint(g); build();
+      };
+      b.dataset.v=it; box.appendChild(b);
+    });
+  });
+}
+function paint(g){
+  document.querySelectorAll(`[data-g="${g.k}"] .chip`).forEach(c=>
+    c.classList.toggle('on', sel[g.k].includes(c.dataset.v)));
+  const c=document.querySelector(`[data-c="${g.k}"]`);
+  c.textContent=`${sel[g.k].length}/${g.max}`;
+  c.classList.toggle('zero', sel[g.k].length===0);
+}
+render(BANK_A,'bankA'); render(BANK_B,'bankB'); render(BANK_C,'bankC');
+
+/* ---------- 값 수집 ---------- */
+const V=()=>{const o={};document.querySelectorAll('[data-k]').forEach(e=>o[e.dataset.k]=e.value.trim());return o;};
+const pick=(k,fb)=>sel[k].length?sel[k].join(', '):(fb||'');
+function line(label,val){return val?`${label}: ${val}\n`:'';}
+
+/* ---------- 프롬프트 조립 ---------- */
+function build(){
+  const v=V();
+  const colorName=sel.color[0]?sel.color[0].split(' ')[0]:'딥그린';
+  const colorHex=sel.color[0]?sel.color[0].split(' ')[1]:'#1F4D3C';
+  document.documentElement.style.setProperty('--point',colorHex);
+
+  const alias=sel.alias[0]||'나의 기록';
+  const my =
+    line('읽게 된 계기', v.why_x||pick('why')) +
+    line('읽은 시기/상황', v.when_x||pick('when')) +
+    line('가장 공감한 지점', v.agree_x||pick('agree')) +
+    line('반발하거나 의심한 지점', v.doubt_x||pick('doubt')) +
+    line('내 삶에 적용할 한 가지', v.act_x||pick('act')) +
+    line('읽고 나서 남은 질문', v.ask_x||pick('ask')) +
+    line('한 줄 자기 기록', v.self_x||pick('self')) +
+    line('자유 감상', v.free);
+
+  const opt=[];
+  if(document.getElementById('opt_ls').checked) opt.push('- 8번 입력폼은 localStorage에 자동 저장·복원 (키: bookreview:<제목 slug>)');
+  if(document.getElementById('opt_txt').checked) opt.push('- 입력한 감상을 .txt로 내려받는 버튼 추가 (Blob + a.download)');
+  if(document.getElementById('opt_anim').checked) opt.push('- 평가 게이지에 0→목표치 CSS 애니메이션(1.2s ease-out) 적용');
+  if(document.getElementById('opt_dark').checked) opt.push('- 우측 상단 다크모드 토글 추가 (prefers-color-scheme 기본값 반영)');
+
+  const metrics = sel.metric.length?sel.metric.join(' / '):'가독성 / 깊이 / 몰입도 / 재독의향';
+  const checks = sel.check.length?sel.check.map((c,i)=>`   ${i+1}) ${c}`).join('\n'):'   (추천 대상에 맞춰 3개 작성)';
+
+  const out =
+`<역할>
+당신은 10년 경력의 북 큐레이터이자 프론트엔드 개발자입니다.
+객관적 서평과 '독자 개인의 감상'을 명확히 분리해 서술하고,
+이를 모던한 단일 HTML 파일로 구현합니다.
+</역할>
+
+<도서정보>
+제목: ${v.title||'{{책 제목}}'}
+저자: ${v.author||'{{저자}}'}
+출판사/연도: ${v.pub||'{{출판사}}'}, ${v.year||'{{연도}}'}
+장르: ${pick('genre','{{장르}}')}
+핵심 주제: ${pick('topic','{{키워드 3~5개}}')}
+인상 깊은 구절: ${v.quote?v.quote.split('\n').filter(Boolean).map(s=>'"'+s.replace(/^"|"$/g,'')+'"').join(' / '):'{{인용문}}'}
+내 평점: ${v.rate||'{{5점 만점}}'}
+추천 대상: ${pick('persona','{{독자 페르소나}}')}
+한 줄 총평: ${pick('oneline','{{한 줄 총평}}')}
+좋았던 점: ${pick('pros','{{강점 3}}')}
+아쉬운 점: ${pick('cons','{{약점 2}}')}
+</도서정보>
+
+<나의감상>
+※ 아래는 '필자인 나'의 주관적 기록입니다. 각색하지 말고 톤을 살려 1인칭으로 다듬어 주세요.
+※ 비어 있는 항목은 임의로 지어내지 말고, 해당 문단을 생략하세요.
+※ 말투: ${v.tone||'존댓말 평문'}
+
+${my||'(감상 미입력 — 6번 섹션은 빈 입력폼만 배치)'}</나의감상>
+
+<작업순서>
+1. <도서정보>로 리뷰의 핵심 논지(thesis) 한 문장을 먼저 정한다.
+2. <나의감상>을 객관 서평과 섞지 말고 별도 섹션으로 분리 배치한다.
+   - 객관 서평: 3인칭 담백한 평문
+   - 나의 감상: 1인칭 '나', ${v.tone||'존댓말 평문'}
+3. 내용 확정 후 HTML/CSS/JS로 구현한다. (내용 → 코드 순서 엄수)
+</작업순서>
+
+<섹션구조>
+1. Hero — 제목, 저자, 별점(★ 시각화), 한 줄 총평
+2. 책 소개 — 3~4문장 요약 (스포일러 금지)
+3. 인상 깊은 구절 — blockquote 카드
+4. 리뷰 본문 — 좋았던 점 / 아쉬운 점 / 사유의 확장
+5. 평가 지표 — 막대 게이지 4개: ${metrics}
+6. ★ ${alias} (필자 감상, 1인칭)
+   6-1 읽게 된 계기   6-2 읽은 시기와 상황
+   6-3 가장 공감한 지점   6-4 의심이 남은 지점
+   6-5 적용할 한 가지(체크박스)   6-6 남은 질문
+   ※ 포인트색 8% 틴트 배경 + 좌측 3px 보더로 객관 서평과 시각 분리
+7. 이런 분께 추천 — 체크리스트
+${checks}
+8. ★ 직접 남기기 — 별점 라디오(★1~5), 한 줄 총평 input,
+   자유 감상 textarea(6행 이상), 읽은 날짜 input[type=date], [저장]/[초기화] 버튼
+9. Footer — 작성일, 작성자${v.writer?' ('+v.writer+')':''}
+</섹션구조>
+
+<제약조건>
+- 단일 .html 파일: CSS는 <style>, JS는 <script>에 인라인. 외부 라이브러리·CDN 금지
+- JS는 바닐라만 사용
+- 폰트: system-ui, 'Pretendard', sans-serif 폴백
+- 반응형: 모바일 1단 / 768px 이상 2단 그리드 (6·8번은 항상 풀폭)
+- 배경 #FAF9F6, 본문 #2B2B2B, 포인트 컬러 ${colorName} ${colorHex} 1색만 사용
+- 디자인 톤: ${sel.dtone[0]||'미니멀'}
+- 객관 서평 ${v.len||'600~900자'} / 나의 기록 300~500자
+- 이미지 파일 참조 금지 (CSS 도형·유니코드만)
+- 접근성: 시맨틱 태그, 모든 입력 요소에 label 또는 aria-label
+- 인쇄 시 8번 버튼류는 숨김(@media print)
+${opt.length?opt.join('\n'):'- (추가 옵션 없음)'}
+</제약조건>
+
+<출력형식>
+설명 없이 \`\`\`html 코드블록 하나만 출력하라.
+</출력형식>
+
+<검증>
+출력 전 자가 점검:
+□ 9개 섹션 모두 존재
+□ 6번이 1인칭, 나머지가 3인칭으로 분리됐는가
+□ 외부 의존성 0개
+□ 빈 입력 항목을 지어내지 않았는가
+미충족 시 수정 후 출력.
+</검증>`;
+
+  document.getElementById('out').textContent=out;
+  const picked=ALL.reduce((s,g)=>s+sel[g.k].length,0);
+  document.getElementById('cnt').textContent=`선택 ${picked}개 · ${out.length.toLocaleString()}자`;
+  const miss=[];
+  if(!v.title) miss.push('제목');
+  if(!sel.genre.length) miss.push('장르');
+  if(!sel.topic.length) miss.push('키워드');
+  document.getElementById('warn').innerHTML = miss.length
+    ? `<span class="over">미입력: ${miss.join(', ')}</span>` : '입력 완료';
+  save();
+}
+
+/* ---------- 저장/복원 ---------- */
+const KEY='promptbuilder:v2';
+function save(){try{const f={};document.querySelectorAll('[data-k]').forEach(e=>f[e.dataset.k]=e.value);
+  ['opt_ls','opt_txt','opt_anim','opt_dark'].forEach(i=>f[i]=document.getElementById(i).checked);
+  localStorage.setItem(KEY,JSON.stringify({sel,f}));}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(!d)return;
+  Object.keys(d.sel||{}).forEach(k=>{if(sel[k])sel[k]=d.sel[k]});
+  Object.entries(d.f||{}).forEach(([k,val])=>{
+    if(k.startsWith('opt_')){const el=document.getElementById(k);if(el)el.checked=val;}
+    else{const el=document.querySelector(`[data-k="${k}"]`);if(el)el.value=val;}});
+  ALL.forEach(paint);}catch(e){}}
+
+/* ---------- 버튼 ---------- */
+function toast(m){const t=document.getElementById('toast');t.textContent=m;
+  t.classList.add('on');clearTimeout(t._);t._=setTimeout(()=>t.classList.remove('on'),1600);}
+document.getElementById('copy').onclick=async()=>{
+  const txt=document.getElementById('out').textContent;
+  try{await navigator.clipboard.writeText(txt);toast('프롬프트를 복사했습니다');}
+  catch(e){const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);
+    ta.select();document.execCommand('copy');ta.remove();toast('복사했습니다');}};
+document.getElementById('dl').onclick=()=>{
+  const v=V();const name=(v.title||'book-review')+'_prompt.txt';
+  const b=new Blob([document.getElementById('out').textContent],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();
+  URL.revokeObjectURL(a.href);toast('저장했습니다');};
+document.getElementById('rand').onclick=()=>{
+  ALL.forEach(g=>{const n=Math.max(1,Math.min(g.max,g.max));const pool=[...g.items];
+    sel[g.k]=[];for(let i=0;i<n;i++){sel[g.k].push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);}
+    paint(g);});
+  build();toast('랜덤으로 채웠습니다');};
+document.getElementById('sample').onclick=()=>{
+  const set=(k,val)=>{const e=document.querySelector(`[data-k="${k}"]`);if(e)e.value=val;};
+  set('title','사피엔스');set('author','유발 하라리');set('pub','김영사');set('year','2015');
+  set('quote','우리는 밀을 길들인 것이 아니라 밀이 우리를 길들였다.');set('rate','4.5');
+  set('why_x',"팀에서 '왜 이 제도가 유지되는가'를 설명하지 못해 답답했다");
+  set('when_x','이직 준비로 공백기였던 2026년 봄');
+  set('agree_x',"돈·국가·회사가 모두 '공유된 허구'라는 대목에서 조직도가 다르게 보였다");
+  set('doubt_x','수렵채집민이 더 행복했다는 주장은 근거가 얇게 느껴졌다');
+  set('act_x','규칙을 볼 때 "누가 만든 허구인가"를 먼저 묻기');
+  set('ask_x','허구임을 알고도 협력을 유지할 수 있을까');
+  set('self_x','당연하던 것들이 전부 질문으로 바뀐 봄');
+  sel.genre=['인문·역사'];sel.topic=['허구의 힘','권력관계','공동체'];
+  sel.persona=['인문서 입문 독자'];sel.oneline=['익숙한 일상을 낯설게 만드는 책'];
+  sel.pros=['독창적 관점','풍부한 사례','설득력 있는 비유'];
+  sel.cons=['주장에 비해 근거가 얇은 장이 있다','사례가 서구권에 편중돼 있다'];
+  sel.metric=['가독성','깊이','몰입도','재독의향'];
+  sel.color=['딥그린 #1F4D3C'];sel.dtone=['매거진형'];sel.alias=['나의 기록'];
+  sel.check=['이 주제를 처음 알아보려는 분','독서모임 발제를 준비하는 분','생각을 글로 남기고 싶은 분'];
+  ALL.forEach(paint);build();toast('예시를 불러왔습니다');};
+document.getElementById('reset').onclick=()=>{
+  if(!confirm('모든 입력과 선택을 초기화할까요?'))return;
+  ALL.forEach(g=>{sel[g.k]=[];paint(g)});
+  document.querySelectorAll('[data-k]').forEach(e=>e.value='');
+  localStorage.removeItem(KEY);build();toast('초기화했습니다');};
+
+document.addEventListener('input',e=>{if(e.target.matches('[data-k],input[type=checkbox]'))build();});
+load(); build();
+</script>
+</body>
+</html>
